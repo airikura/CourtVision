@@ -12,9 +12,12 @@ export function useSSE(sessionId: string | null) {
     if (!sessionId) return;
 
     setStreamStatus("streaming");
-    const es = new EventSource(
-      `${API_BASE_URL}/analysis/${sessionId}/stream`
-    );
+    // EventSource doesn't support custom headers, so pass JWT as query param
+    const token = typeof window !== "undefined" ? localStorage.getItem("cv_token") : null;
+    const url = token
+      ? `${API_BASE_URL}/analysis/${sessionId}/stream?token=${encodeURIComponent(token)}`
+      : `${API_BASE_URL}/analysis/${sessionId}/stream`;
+    const es = new EventSource(url);
 
     es.onmessage = (e) => {
       try {

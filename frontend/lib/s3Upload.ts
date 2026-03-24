@@ -32,6 +32,13 @@ export function uploadToBackend(
     xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
 
     xhr.open("PUT", uploadUrl);
+
+    // Attach auth token so the backend can verify ownership
+    const token = typeof window !== "undefined" ? localStorage.getItem("cv_token") : null;
+    if (token) {
+      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    }
+
     xhr.send(formData);
   });
 }

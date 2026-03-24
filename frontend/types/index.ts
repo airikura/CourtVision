@@ -34,3 +34,24 @@ export type UploadPhase =
   | "error";
 
 export type StreamStatus = "idle" | "streaming" | "done" | "error";
+
+export interface User {
+  id: string;
+  email: string;
+  display_name: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
+}
+
+export interface VideoSummary {
+  id: string;
+  filename: string;
+  status: string;
+  file_size_bytes: number;
+  insight_count: number;
+  created_at: string;
+}
