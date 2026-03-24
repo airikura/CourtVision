@@ -11,7 +11,7 @@ from google.auth.transport.requests import Request
 from google.auth import default as google_auth_default
 from core.config import settings
 
-_client: storage.Client | None = None
+_client = None
 _credentials = None
 
 
@@ -47,3 +47,11 @@ def open_blob_stream(session_id: str):
     bucket = client.bucket(settings.gcs_bucket_name)
     blob = bucket.blob(f"uploads/{session_id}/video")
     return blob.open("rb")
+
+
+def delete_blob(session_id: str) -> None:
+    """Delete video blob from GCS."""
+    client = get_client()
+    bucket = client.bucket(settings.gcs_bucket_name)
+    blob = bucket.blob(f"uploads/{session_id}/video")
+    blob.delete()

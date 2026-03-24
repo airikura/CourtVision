@@ -1,25 +1,35 @@
-import json
-import asyncio
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse, RedirectResponse, Response
+from __future__ import annotations
 
-from models.schemas import AnalysisResultsResponse
-from services import gemini_service, gcs_service
-from routers.upload import get_session
+import asyncio
+import json
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse, Response
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.auth import get_current_user
+from database import get_db
+from models.db_models import InsightRow, User, Video
+from models.schemas import AnalysisResultsResponse, Insight
+from services import gcs_service, gemini_service
 
 router = APIRouter()
 
-# Cache completed analyses (replace with persistent store in production)
-_completed: dict[str, list] = {}
-
 
 @router.get("/{session_id}/stream")
-async def stream_analysis(session_id: str):
-    session = get_session(session_id)
-    if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-    if session.get("status") != "ready":
+async def stream_analysis(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    video = await _get_owned_video(session_id, current_user.id, db)
+    if video.status not in ("ready", "analyzing"):
         raise HTTPException(status_code=400, detail="Session not ready for analysis")
+
+    video.status = "analyzing"
+    await db.commit()
 
     async def event_generator():
         insights = []
@@ -28,10 +38,28 @@ async def stream_analysis(session_id: str):
                 insights.append(insight)
                 yield f"data: {insight.model_dump_json()}\n\n"
         except Exception as e:
+            # Roll back status on error
+            async with db.begin_nested():
+                video.status = "error"
+            await db.commit()
             yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
             return
 
-        _completed[session_id] = insights
+        # Persist insights and mark done
+        for ins in insights:
+            row = InsightRow(
+                id=ins.id or str(uuid.uuid4()),
+                video_id=session_id,
+                timestamp_start=ins.timestamp_start,
+                timestamp_end=ins.timestamp_end,
+                stroke_type=ins.stroke_type.value,
+                issue_severity=ins.issue_severity.value,
+                analysis_text=ins.analysis_text,
+                correction_text=ins.correction_text,
+            )
+            db.add(row)
+        video.status = "done"
+        await db.commit()
         yield "event: done\ndata: {}\n\n"
 
     return StreamingResponse(
@@ -46,11 +74,14 @@ async def stream_analysis(session_id: str):
 
 
 @router.get("/{session_id}/video")
-async def get_video(session_id: str, request: Request):
-    """
-    Stream video from GCS with range request support.
-    No session lookup — the file path is deterministic from session_id.
-    """
+async def get_video(
+    session_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_owned_video(session_id, current_user.id, db)
+
     try:
         data = await asyncio.to_thread(gcs_service.download_blob, session_id)
     except Exception:
@@ -60,7 +91,6 @@ async def get_video(session_id: str, request: Request):
     range_header = request.headers.get("range")
 
     if range_header:
-        # Parse "bytes=start-end"
         byte_range = range_header.replace("bytes=", "").split("-")
         start = int(byte_range[0])
         end = int(byte_range[1]) if byte_range[1] else total - 1
@@ -91,16 +121,42 @@ async def get_video(session_id: str, request: Request):
 
 
 @router.get("/{session_id}/results", response_model=AnalysisResultsResponse)
-async def get_results(session_id: str):
-    session = get_session(session_id)
-    if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+async def get_results(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    video = await _get_owned_video(session_id, current_user.id, db)
 
-    if session_id in _completed:
-        return AnalysisResultsResponse(
-            insights=_completed[session_id],
-            status="done",
+    if video.status == "done":
+        result = await db.execute(
+            select(InsightRow).where(InsightRow.video_id == session_id)
         )
+        rows = result.scalars().all()
+        insights = [_row_to_insight(r) for r in rows]
+        return AnalysisResultsResponse(insights=insights, status="done")
 
-    status = session.get("status", "streaming")
+    status = video.status if video.status in ("streaming", "error") else "streaming"
     return AnalysisResultsResponse(insights=[], status=status)
+
+
+def _row_to_insight(row: InsightRow) -> Insight:
+    return Insight(
+        id=row.id,
+        timestamp_start=row.timestamp_start,
+        timestamp_end=row.timestamp_end,
+        stroke_type=row.stroke_type,
+        issue_severity=row.issue_severity,
+        analysis_text=row.analysis_text,
+        correction_text=row.correction_text,
+    )
+
+
+async def _get_owned_video(session_id: str, user_id: str, db: AsyncSession) -> Video:
+    result = await db.execute(
+        select(Video).where(Video.id == session_id, Video.user_id == user_id)
+    )
+    video = result.scalar_one_or_none()
+    if video is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return video
