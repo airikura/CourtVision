@@ -67,14 +67,18 @@ export function PracticePlanModal({ sessionId, onClose }: PracticePlanModalProps
   const insights = useInsightsStore((s) => s.insights);
   const [plan, setPlan] = useState<{ markdown: string; cues_markdown: string; drills_markdown: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState<Tab>("drill");
 
   const generate = async () => {
     setLoading(true);
+    setError(null);
     try {
       const result = await generatePracticePlan(sessionId);
       setPlan(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate practice plan");
     } finally {
       setLoading(false);
     }
@@ -161,6 +165,11 @@ export function PracticePlanModal({ sessionId, onClose }: PracticePlanModalProps
                 Generate a practice checklist from all {insights.length}{" "}
                 insights in this session.
               </p>
+              {error && (
+                <p className="text-sm text-red-400 mb-4 bg-red-500/10 border border-red-500/30 rounded px-3 py-2">
+                  {error}
+                </p>
+              )}
               <Button onClick={generate}>Generate Practice Plan</Button>
             </div>
           )}
