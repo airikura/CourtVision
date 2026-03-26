@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, use } from "react";
+import { useState, use, useCallback } from "react";
 import { useSSE } from "@/hooks/useSSE";
 import { useVideoPlayer } from "@/hooks/useVideoPlayer";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -19,16 +19,21 @@ interface PageProps {
 
 function AnalysisContent({ sessionId }: { sessionId: string }) {
   const [showPlan, setShowPlan] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const handleRetry = useCallback(() => setRetryCount((n) => n + 1), []);
 
   const { videoRef, seekTo, togglePlay, stepFrame, setPlaybackRate } =
     useVideoPlayer();
 
-  useSSE(sessionId);
+  useSSE(sessionId, retryCount);
   useKeyboardShortcuts({ seekTo, togglePlay, stepFrame });
 
   const streamStatus = useInsightsStore((s) => s.streamStatus);
 
-  const videoSrc = `${API_BASE_URL}/analysis/${sessionId}/video`;
+  const token = typeof window !== "undefined" ? localStorage.getItem("cv_token") : null;
+  const videoSrc = token
+    ? `${API_BASE_URL}/analysis/${sessionId}/video?token=${encodeURIComponent(token)}`
+    : `${API_BASE_URL}/analysis/${sessionId}/video`;
 
   return (
     <div className="flex flex-col h-screen bg-gray-950 overflow-hidden">
@@ -71,7 +76,7 @@ function AnalysisContent({ sessionId }: { sessionId: string }) {
         </div>
 
         <div className="w-96 shrink-0 flex flex-col">
-          <InsightsPanel seekTo={seekTo} />
+          <InsightsPanel seekTo={seekTo} sessionId={sessionId} onRetry={handleRetry} />
         </div>
       </div>
 

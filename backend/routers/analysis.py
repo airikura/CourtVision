@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.auth import get_current_user
 from database import get_db
 from models.db_models import InsightRow, User, Video
-from models.schemas import AnalysisResultsResponse, Insight
+from models.schemas import AnalysisResultsResponse, ChatRequest, ChatResponse, Insight
 from services import gcs_service, gemini_service
 
 router = APIRouter()
@@ -25,16 +25,22 @@ async def stream_analysis(
     db: AsyncSession = Depends(get_db),
 ):
     video = await _get_owned_video(session_id, current_user.id, db)
-    if video.status not in ("ready", "analyzing"):
+    if video.status not in ("ready", "analyzing", "error"):
         raise HTTPException(status_code=400, detail="Session not ready for analysis")
 
     video.status = "analyzing"
     await db.commit()
 
+    analysis_context = {
+        "player_name": video.player_name,
+        "focus_areas": video.focus_areas,
+        "problems": video.problems,
+    }
+
     async def event_generator():
         insights = []
         try:
-            async for insight in gemini_service.stream_analysis(session_id):
+            async for insight in gemini_service.stream_analysis(session_id, context=analysis_context):
                 insights.append(insight)
                 yield f"data: {insight.model_dump_json()}\n\n"
         except Exception as e:
@@ -138,6 +144,37 @@ async def get_results(
 
     status = video.status if video.status in ("streaming", "error") else "streaming"
     return AnalysisResultsResponse(insights=[], status=status)
+
+
+@router.post("/{session_id}/chat", response_model=ChatResponse)
+async def chat_about_analysis(
+    session_id: str,
+    body: ChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    video = await _get_owned_video(session_id, current_user.id, db)
+
+    result = await db.execute(
+        select(InsightRow).where(InsightRow.video_id == session_id)
+    )
+    rows = result.scalars().all()
+    insights = [_row_to_insight(r) for r in rows]
+
+    player_context = {
+        "player_name": video.player_name,
+        "focus_areas": video.focus_areas,
+        "problems": video.problems,
+    }
+
+    history = [{"role": m.role, "content": m.content} for m in body.history]
+    reply = await gemini_service.generate_chat_response(
+        insights=insights,
+        player_context=player_context,
+        message=body.message,
+        history=history,
+    )
+    return ChatResponse(reply=reply)
 
 
 def _row_to_insight(row: InsightRow) -> Insight:
