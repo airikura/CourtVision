@@ -88,7 +88,8 @@ export async function getMe(token: string): Promise<User> {
 export async function initUpload(
   filename: string,
   contentType: string,
-  fileSizeBytes: number
+  fileSizeBytes: number,
+  context?: { playerName?: string; focusAreas?: string; problems?: string }
 ): Promise<UploadInitResponse> {
   const res = await authFetch(`${API_BASE_URL}/upload/init`, {
     method: "POST",
@@ -97,6 +98,9 @@ export async function initUpload(
       filename,
       content_type: contentType,
       file_size_bytes: fileSizeBytes,
+      player_name: context?.playerName || null,
+      focus_areas: context?.focusAreas || null,
+      problems: context?.problems || null,
     }),
   });
   if (!res.ok) throw new Error(`Upload init failed: ${res.statusText}`);
@@ -110,6 +114,14 @@ export async function confirmUpload(sessionId: string): Promise<void> {
     body: JSON.stringify({ session_id: sessionId }),
   });
   if (!res.ok) throw new Error(`Upload confirm failed: ${res.statusText}`);
+}
+
+// ── Analysis endpoints ────────────────────────────────────────────────────────
+
+export async function getAnalysisResults(sessionId: string): Promise<{ insights: import("@/types").Insight[]; status: string }> {
+  const res = await authFetch(`${API_BASE_URL}/analysis/${sessionId}/results`);
+  if (!res.ok) throw new Error(`Failed to load results: ${res.statusText}`);
+  return res.json();
 }
 
 // ── Library endpoints ─────────────────────────────────────────────────────────
@@ -127,18 +139,32 @@ export async function deleteVideo(videoId: string): Promise<void> {
   if (!res.ok) throw new Error(`Failed to delete video: ${res.statusText}`);
 }
 
+export async function chatWithAnalysis(
+  sessionId: string,
+  message: string,
+  history: Array<{ role: "user" | "assistant"; content: string }>
+): Promise<string> {
+  const res = await authFetch(`${API_BASE_URL}/analysis/${sessionId}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, history }),
+  });
+  if (!res.ok) throw new Error(`Chat failed: ${res.statusText}`);
+  const data = await res.json();
+  return data.reply;
+}
+
 // ── Export endpoints ──────────────────────────────────────────────────────────
 
 export async function generatePracticePlan(
   sessionId: string,
   insightIds?: string[]
-): Promise<string> {
+): Promise<{ markdown: string; cues_markdown: string; drills_markdown: string }> {
   const res = await authFetch(`${API_BASE_URL}/export/practice-plan`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_id: sessionId, insight_ids: insightIds ?? null }),
   });
   if (!res.ok) throw new Error(`Export failed: ${res.statusText}`);
-  const data = await res.json();
-  return data.markdown as string;
+  return res.json();
 }

@@ -20,12 +20,18 @@ from services import gcs_service
 router = APIRouter()
 
 
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
+
+
 @router.post("/init", response_model=UploadInitResponse)
 async def init_upload(
     body: UploadInitRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if body.file_size_bytes > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File exceeds the 100 MB limit.")
+
     session_id = str(uuid.uuid4())
     gcs_path = f"uploads/{session_id}/video"
 
@@ -37,6 +43,9 @@ async def init_upload(
         file_size_bytes=body.file_size_bytes,
         status="pending",
         gcs_path=gcs_path,
+        player_name=body.player_name,
+        focus_areas=body.focus_areas,
+        problems=body.problems,
     )
     db.add(video)
     await db.commit()

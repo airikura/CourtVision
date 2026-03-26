@@ -1,0 +1,10 @@
+.gcloudignore
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.db
+.env
+alembic/versions/__pycache__

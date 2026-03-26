@@ -22,6 +22,10 @@ declare global {
 export function GoogleSignInButton({ onCredential }: Props) {
   const divRef = useRef<HTMLDivElement>(null);
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+  const onCredentialRef = useRef(onCredential);
+  useEffect(() => {
+    onCredentialRef.current = onCredential;
+  }, [onCredential]);
 
   useEffect(() => {
     if (!clientId) return;
@@ -31,7 +35,7 @@ export function GoogleSignInButton({ onCredential }: Props) {
       window.google.accounts.id.initialize({
         client_id: clientId,
         callback: (response: { credential: string }) => {
-          onCredential(response.credential);
+          onCredentialRef.current(response.credential);
         },
       });
       window.google.accounts.id.renderButton(divRef.current, {
@@ -59,7 +63,7 @@ export function GoogleSignInButton({ onCredential }: Props) {
     return () => {
       // Script stays in DOM for page reuse — no cleanup needed
     };
-  }, [clientId, onCredential]);
+  }, [clientId]); // onCredential intentionally excluded — ref above handles updates
 
   if (!clientId) return null;
 

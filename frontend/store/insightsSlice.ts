@@ -6,10 +6,12 @@ interface InsightsState {
   streamStatus: StreamStatus;
   activeFilter: FilterType;
   addInsight: (insight: Insight) => void;
+  setInsights: (insights: Insight[]) => void;
   setStreamStatus: (status: StreamStatus) => void;
   setActiveFilter: (filter: FilterType) => void;
   toggleFilter: (filter: Exclude<FilterType, null>) => void;
   filteredInsights: () => Insight[];
+  reset: () => void;
 }
 
 export const useInsightsStore = create<InsightsState>((set, get) => ({
@@ -18,7 +20,9 @@ export const useInsightsStore = create<InsightsState>((set, get) => ({
   activeFilter: null,
   addInsight: (insight) =>
     set((state) => ({ insights: [...state.insights, insight] })),
+  setInsights: (insights) => set({ insights }),
   setStreamStatus: (status) => set({ streamStatus: status }),
+  reset: () => set({ insights: [], streamStatus: "idle", activeFilter: null }),
   setActiveFilter: (filter) => set({ activeFilter: filter }),
   toggleFilter: (filter) =>
     set((state) => ({

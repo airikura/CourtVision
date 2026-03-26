@@ -37,6 +37,9 @@ class Video(Base):
     file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
     gcs_path: Mapped[str] = mapped_column(String, nullable=False)
+    player_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    focus_areas: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    problems: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
 

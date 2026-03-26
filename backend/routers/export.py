@@ -8,6 +8,8 @@ from core.auth import get_current_user
 from database import get_db
 from models.db_models import InsightRow, User, Video
 from models.schemas import PracticePlanRequest, PracticePlanResponse, Insight
+import asyncio
+from services.gemini_service import generate_match_cues, generate_drills
 
 router = APIRouter()
 
@@ -54,7 +56,20 @@ async def generate_practice_plan(
             lines.append(f"- {severity_label} {item.correction_text}")
         lines.append("")
 
-    return PracticePlanResponse(markdown="\n".join(lines))
+    correction_groups = {
+        stroke: [i.correction_text for i in items]
+        for stroke, items in groups.items()
+    }
+    cues_markdown, drills_markdown = await asyncio.gather(
+        generate_match_cues(correction_groups),
+        generate_drills(correction_groups),
+    )
+
+    return PracticePlanResponse(
+        markdown="\n".join(lines),
+        cues_markdown=cues_markdown,
+        drills_markdown=drills_markdown,
+    )
 
 
 def _row_to_insight(row: InsightRow) -> Insight:

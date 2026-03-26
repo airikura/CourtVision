@@ -35,6 +35,9 @@ class UploadInitRequest(BaseModel):
     filename: str
     content_type: str
     file_size_bytes: int
+    player_name: Optional[str] = None
+    focus_areas: Optional[str] = None
+    problems: Optional[str] = None
 
 
 class UploadInitResponse(BaseModel):
@@ -55,6 +58,20 @@ class AnalysisResultsResponse(BaseModel):
     status: Literal["done", "streaming", "error"]
 
 
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list[ChatMessage] = []
+
+
+class ChatResponse(BaseModel):
+    reply: str
+
+
 class PracticePlanRequest(BaseModel):
     session_id: str
     insight_ids: Optional[list[str]] = None
@@ -62,3 +79,5 @@ class PracticePlanRequest(BaseModel):
 
 class PracticePlanResponse(BaseModel):
     markdown: str
+    cues_markdown: str
+    drills_markdown: str
