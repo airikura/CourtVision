@@ -105,7 +105,7 @@ async def stream_analysis(session_id: str, context: dict | None = None) -> Async
                 file_uri=gemini_file.uri,
                 mime_type="video/mp4",
             ),
-            video_metadata=types.VideoMetadata(fps=24, media_resolution=types.MediaResolution.MEDIA_RESOLUTION_MEDIUM),
+            video_metadata=types.VideoMetadata(fps=24),
         )
 
         prompt = _build_analysis_prompt(context)
@@ -116,6 +116,7 @@ async def stream_analysis(session_id: str, context: dict | None = None) -> Async
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 temperature=0.2,
+                media_resolution=types.MediaResolution.MEDIA_RESOLUTION_MEDIUM,
             ),
         )
 
